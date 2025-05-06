@@ -10,7 +10,10 @@ from captum.attr import IntegratedGradients
 from pandas import read_excel
 from scipy.stats import mannwhitneyu
 from sklearn.metrics import precision_recall_curve, roc_curve
-import scanpypip.utils as ut
+from collections import defaultdict
+from torch.utils.data import DataLoader, TensorDataset, Subset
+
+
 
 '''
 El archivo utils.py proporciona un conjunto de funciones auxiliares 
@@ -470,7 +473,7 @@ def integrated_gradient_differential(net,input,target,adata,n_genes=None,target_
         for label in [0,1]:
 
             try:
-                df_degs = ut.get_de_dataframe(igadata,label)#Filtra genes con criterio estadistico 
+                df = sc.get.rank_genes_groups_df(igadata, group=label)#Filtra genes con criterio estadistico 
                 df_degs = df_degs.loc[(df_degs.pvals_adj<ig_pval) & (df_degs.logfoldchanges>=ig_fc)]
                #Guardamos resuktados por clase (0 o 1)
                 df_degs.to_csv("save/results/DIG_class_" +str(target_class)+"_"+str(label)+ save_name + '.csv')
@@ -499,7 +502,7 @@ def de_score(adata,clustername,pval=0.05,n=50,method="wilcoxon",score_prefix=Non
         sc.tl.rank_genes_groups(adata, clustername, method=method,use_raw=False)
     # Cluster de score
     for cluster in set(adata.obs[clustername]):
-        df = ut.get_de_dataframe(adata,cluster)
+        df = sc.get.rank_genes_groups_df(adata, group=cluster)
         select_df = df.iloc[:n,:]
         if pval!=None:
             select_df = select_df.loc[df.pvals_adj < pval]
@@ -541,6 +544,7 @@ def plot_loss(report,path="figures/loss.pdf",set_ylim=False):
         #Underfitting o modelo muy flojo: AMbas curvas se mantienen altas y no mejoran
     return score_dict
 
+#CALCULAR IMPORTANCIA DE GENES
 def calculate_gene_weights(expression_matrix, top_percentage=0.2):
     """
     Calcula pesos para los genes basados en su varianza.
@@ -568,6 +572,38 @@ def calculate_gene_weights(expression_matrix, top_percentage=0.2):
 
     return weights
 
+#CALCULAR CURRICULUM LEARNING
+
+def get_curriculum_dataloader(X_tensor, C_tensor, batch_size=128):
+    """
+    Crea un dataloader agrupando primero las células de clusters más grandes (más fáciles).
+
+    Args:
+        X_tensor (torch.Tensor): matriz de expresión (células x genes)
+        C_tensor (torch.Tensor): vector de labels de cluster (leiden)
+        batch_size (int): tamaño de batch
+
+    Returns:
+        dict: {'train': DataLoader} (con currículum aplicado)
+    """
+    # Agrupar índices por cluster
+    cluster_to_indices = defaultdict(list)
+    for idx, cluster in enumerate(C_tensor.cpu().numpy()):
+        cluster_to_indices[cluster].append(idx)
+
+    # Ordenar clusters de menor a mayor dificultad (por tamaño)
+    sorted_clusters = sorted(cluster_to_indices.items(), key=lambda x: len(x[1]))
+
+    # Acumular índices de los clusters (más grandes primero)
+    all_indices = []
+    for _, indices in sorted_clusters:
+        all_indices += indices
+
+    # Crear subset ordenado
+    subset = Subset(TensorDataset(X_tensor, C_tensor), all_indices)
+    loader = DataLoader(subset, batch_size=batch_size, shuffle=True)
+
+    return {'train': loader}
 
 def integrated_gradient_differential(net,input,target,adata,n_genes=None,target_class=1,clip="abs",save_name="feature_gradients",ig_pval=0.05,ig_fc=1,method="wilcoxon",batch_size=100):
         
@@ -598,7 +634,7 @@ def integrated_gradient_differential(net,input,target,adata,n_genes=None,target_
         for label in [0,1]:
 
             try:
-                df_degs = ut.get_de_dataframe(igadata,label)
+                df = sc.get.rank_genes_groups_df(igadata, group=label)
                 df_degs = df_degs.loc[(df_degs.pvals_adj<ig_pval) & (df_degs.logfoldchanges>=ig_fc)]
                 df_degs.to_csv("save/results/DIG_class_" +str(target_class)+"_"+str(label)+ save_name + '.csv')
 

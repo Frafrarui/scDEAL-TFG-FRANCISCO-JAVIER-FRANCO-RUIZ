@@ -136,7 +136,7 @@ def train_DAE_model(net,data_loaders={},optimizer=None,loss_function=None,n_epoc
         else:
             logging.warning("Failed to load existing file, proceed to the trainning process.")
     
-    dataset_sizes = {x: data_loaders[x].dataset.tensors[0].shape[0] for x in ['train', 'val']}
+    dataset_sizes = {x: len(data_loaders[x].dataset) for x in ['train', 'val']}
     loss_train = {}
     
     best_model_wts = copy.deepcopy(net.state_dict())

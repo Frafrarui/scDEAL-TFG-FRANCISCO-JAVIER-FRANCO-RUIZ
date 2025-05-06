@@ -93,6 +93,8 @@ def run_main(args):
         args.dropout = float(paras[7])
         args.dimreduce = paras[6]
                 # Nuevo: Imprimir si el modelo tiene gene importance
+        print(f"[DEBUG] use_curriculum = {args.use_curriculum} (type: {type(args.use_curriculum)})")
+
         if "GenImpo" in args.dimreduce:
             print("✅ Modelo cargado con importancia de genes (DAE + Gene Importance)")
             args.dimreduce = args.dimreduce.replace("GenImpo", "")  # Quitamos GenImpo para que DAE siga funcionando normal
@@ -149,7 +151,12 @@ def run_main(args):
     #para--->constuimos el nombre del experimento 
     # Antes de construir 'para', ponemos un sufijo
      # Primero añade una variable que detecte si tienes prioridad
-    prioritized_suffix = "GenImpo" if getattr(args, "use_prioritized_loss", False) else ""
+    prioritized_suffix = ""
+    if getattr(args, "use_prioritized_loss", False):
+        prioritized_suffix += "GenImpo"
+    if getattr(args, "use_curriculum", False):
+        prioritized_suffix += "Curriculum"
+
 
     # Ahora construyes 'para' incluyendo prioritized_suffix
     para = str(args.bulk) + "_data_" + str(args.sc_data) + "_drug_" + str(args.drug) + \
@@ -189,14 +196,43 @@ def run_main(args):
     # Save arguments
     # Overwrite params if checkpoint is provided
     if(args.checkpoint not in ["False","True"]):
-        para = os.path.basename(selected_model).split("_DaNN.pkl")[0]
+        selected_model = args.checkpoint
+        split_name = selected_model.split("/")[-1].split("_")
+        para_names = (split_name[1::2])
+        paras = (split_name[0::2])
+        args.bulk_h_dims = paras[4]
+        args.sc_h_dims = paras[4]
+        args.predictor_h_dims = paras[5]
+        args.bottleneck = int(paras[3])
+        args.drug = paras[2]
+        args.dropout = float(paras[7])
+        args.dimreduce = paras[6]
+        
+        prioritized_suffix = ""
+        if getattr(args, "use_prioritized_loss", False):
+            prioritized_suffix += "GenImpo"
+        if getattr(args, "use_curriculum", False):
+            prioritized_suffix += "Curriculum"
+
+        para = str(args.bulk) + "_data_" + str(paras[1]) + "_drug_" + str(args.drug) + \
+            "_bottle_" + str(args.bottleneck) + "_edim_" + str(args.bulk_h_dims) + \
+            "_pdim_" + str(args.predictor_h_dims) + "_model_" + args.dimreduce + prioritized_suffix + \
+            "_dropout_" + str(args.dropout) + "_gene_" + str(args.printgene) + \
+            "_lr_" + str(args.lr) + "_mod_" + str(args.mod) + "_sam_" + str(args.sampling)
+
         args.checkpoint = "True"
 
-    sc_encoder_path = args.sc_encoder_path+para
-    source_model_path = args.bulk_model_path+para
+
+
+    
+    # Añadir sufijo al nombre del encoder si usas curriculum learning
+    curriculum_suffix = "_curriculum" if args.use_curriculum else ""
+    sc_encoder_path = args.sc_encoder_path + para + curriculum_suffix
+
+    # Las demás rutas se quedan igual
+    source_model_path = args.bulk_model_path + para
+    target_model_path = args.sc_model_path + para
     print(source_model_path)
-    #print(source_model_path)
-    target_model_path = args.sc_model_path +para
     args_df = ut.save_arguments(args,now)#guarda los argumentos usados
 ################################################# END SECTION OF LOADING PARAMETERS ##############################################################
 
@@ -226,6 +262,14 @@ def run_main(args):
         adata =  ut.specific_process(adata,dataname=data_name)
     else:
         adata=adata
+
+    #usamos curriculum
+    print(f"[DEBUG] Entramos a verificar curriculum - args.use_curriculum: {args.use_curriculum} (type: {type(args.use_curriculum)})")
+    if args.use_curriculum:
+        print("✅ Activado Curriculum Learning: calculando vecinos y clusters")
+        sc.pp.neighbors(adata)
+        sc.tl.leiden(adata)
+
 
     #PREPROCESADO DATOS SINGLE CELL
     # Filter cells and genes
@@ -315,7 +359,21 @@ def run_main(args):
     Xtarget_trainDataLoader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True) 
     Xtarget_validDataLoader = DataLoader(dataset=valid_dataset, batch_size=batch_size, shuffle=True)
 
-    dataloaders_pretrain = {'train':Xtarget_trainDataLoader,'val':Xtarget_validDataLoader}#Guardamos en un diccionario, lo usaremis mas adelante
+    if args.use_curriculum:
+        print("✅ Aplicando Curriculum Learning con clusters leiden")
+        
+        X_tensor = Xtarget_trainTensor
+        C_tensor = Ctarget_trainTensor
+        print("✅ [DEBUG] Cargando DataLoader con Curriculum Learning...")
+        dataloaders_pretrain = ut.get_curriculum_dataloader(X_tensor, C_tensor, batch_size=batch_size)
+        dataloaders_pretrain['val'] = Xtarget_validDataLoader
+
+
+        dataloaders_pretrain['val'] = Xtarget_validDataLoader
+    else:
+        dataloaders_pretrain = {'train': Xtarget_trainDataLoader, 'val': Xtarget_validDataLoader}
+
+    #Guardamos en un diccionario, lo usaremis mas adelante
     #print('START SECTION OF LOADING SC DATA TO THE TENSORS')
 #Al final de esto tenemos:
     #Los datosnormalizados 
@@ -462,23 +520,29 @@ def run_main(args):
     # Pretain using autoencoder is pretrain is not False
     if(str(args.sc_encoder_path)!='False'): # Comprobamos si se debe hacer preentramiento n
         # Pretrained target encoder if there are not stored files in the harddisk
+        
         train_flag = True
         sc_encoder_path = str(sc_encoder_path)
         print("Pretrain=="+sc_encoder_path)
         
         # If pretrain is not False load from check point
-        if(args.checkpoint!="False"):
-            # if checkpoint is not False, load the pretrained model, si no lo hace desde 0
-            try:
-                encoder.load_state_dict(torch.load(sc_encoder_path))
-                logging.info("Load pretrained target encoder from "+sc_encoder_path)
-                train_flag = False
+        if args.checkpoint != "False":
+            if args.use_curriculum:
+                print("⚠️ [CURRICULUM] Se fuerza reentrenamiento del encoder aunque haya checkpoint")
+                train_flag = True  # ignoramos el checkpoint
+            else:
+                try:
+                    encoder.load_state_dict(torch.load(sc_encoder_path))
+                    logging.info("Load pretrained target encoder from " + sc_encoder_path)
+                    train_flag = False
+                except:
+                    logging.info("Loading failed, procceed to re-train model")
+                    train_flag = True
 
-            except:
-                logging.info("Loading failed, procceed to re-train model")
-                train_flag = True
 
         # If pretrain is not False and checkpoint is False, retrain the model
+        if args.use_curriculum:
+            print("🎯 [CURRICULUM] Pretraining con curriculum activado")
         if train_flag == True:
             #Aqui se llama a la funcion de trainer.py que hace el entrenamiento del encoder
             if reduce_model == "AE":
@@ -489,6 +553,7 @@ def run_main(args):
                 encoder,loss_report_en = t.train_DAE_model(net=encoder,data_loaders=dataloaders_pretrain,
                                             optimizer=optimizer_e,loss_function=loss_function_e,load=False,
                                             n_epochs=epochs,scheduler=exp_lr_scheduler_e,save_path=sc_encoder_path)
+                
                                             
             elif reduce_model == "VAE":
                 encoder,loss_report_en = t.train_VAE_model(net=encoder,data_loaders=dataloaders_pretrain,
@@ -649,7 +714,9 @@ def run_main(args):
         print("✅ Borrando sens_label_pret para evitar error al guardar")
         del adata.obs["sens_label_pret"]
 
-    adata.write("save/adata/"+data_name+para+".h5ad")#Esta linea guarda todo el objeto adata en un carchivo .h5ad
+    #Esta linea guarda todo el objeto adata en un carchivo .h5ad
+    adata.write(f"save/adata/{data_name}_{para}.h5ad")
+
     print("✅ Archivo grande guardado correctamente")
 ################################################# END SECTION OF ANALYSIS FOR scRNA-Seq DATA #################################################
     #Con esto evaluamos el modelo entrenado y (si se pide) interpretar los genes mas relevantes 
@@ -773,6 +840,7 @@ if __name__ == '__main__':
     #
     #Modificaciones 
     parser.add_argument('--use_prioritized_loss', action='store_true', help='Use gene-prioritized reconstruction loss instead of standard MSE loss.')
+    parser.add_argument('--use_curriculum', action='store_true', help='Use Curriculum Learning by training first with easy cells.')
 
 
 

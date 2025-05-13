@@ -106,10 +106,12 @@ def run_main(args):
     
     #para--> genera el nombre del archivo que se va a guardar
     # Creamos un sufijo si estamos usando prioritized loss
+    suffix = ""
     if args.use_prioritized_loss:
-        suffix = "GenImpo"
-    else:
-        suffix = ""
+        suffix += "GenImpo"
+    if args.use_gene_filter:
+        suffix += "TOPGENES"
+
 
     #para--> genera el nombre del archivo que se va a guardar
     para = str(args.bulk)+"_data_"+str(args.data_name)+"_drug_"+str(args.drug)+ \
@@ -205,11 +207,24 @@ def run_main(args):
     label = label_r.loc[selected_idx,select_drug]#extraemos las etiquetas (0,1) para el farmaco seleccionado
     data_r = data_r.loc[selected_idx,:]#guardamos la tabla original no vaya a ser que sea necesaria en un futuro
 
+    #  Si el usuario quiere usar solo los genes más variables
+    if args.use_gene_filter:
+        print("✅ Filtrando solo los genes más variables (top {:.0f}%)".format(args.top_gene_percentage * 100))
+
+        data_df = pd.DataFrame(data, columns=data_r.columns)  # le pasamos los nombres reales de los genes
+        data_df_filtered, selected_genes = ut.select_top_variable_genes(data_df, top_percentage=args.top_gene_percentage)
+        data = data_df_filtered.values  # convertimos a array para que siga funcionando igual
+
+        # Guardar los genes seleccionados en un archivo de texto
+        with open(f"save/adata/selected_genes_{args.data_name}.txt", "w") as f:
+            for gene in selected_genes:
+                f.write(str(gene) + "\n")
     # Scaling data,escalamos todos los valores entre 0 y 1 , ya que puede haber genes 
     #con vaklores entre 0 y 1000 y otro entre 0 y 1
     mmscaler = preprocessing.MinMaxScaler()
 
     data = mmscaler.fit_transform(data)
+
     label = label.values.reshape(-1,1)#con reshape nos aseguramos que tiene la forma correcta
 
 
@@ -556,9 +571,15 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.3,help='Dropout of neural network. Default: 0.3')
     #QUe base de datos usar : GDSC, CCLE o integrate ambas
     parser.add_argument('--bulk', type=str, default='integrate',help='Selection of the bulk database.integrate:both dataset. old: GDSC. new: CCLE. Default: integrate')
-    #MODIFICACIONES
+    
+    #MODIFICACIONES MIAS
     # Añadir opción para usar pérdida ponderada por genes importantes
     parser.add_argument('--use_prioritized_loss', action='store_true', help='Use gene-prioritized reconstruction loss instead of standard MSE loss.')
+    
+    # Añadir opción para filtrar solo los genes más variables
+    parser.add_argument('--use_gene_filter', action='store_true', help='Filtrar solo el top % de genes más variables antes de entrenar el modelo')
+    parser.add_argument('--top_gene_percentage', type=float, default=0.2, help='Porcentaje de genes más variables a conservar (ej. 0.2 = 20%)')
+
 
     warnings.filterwarnings("ignore")
 

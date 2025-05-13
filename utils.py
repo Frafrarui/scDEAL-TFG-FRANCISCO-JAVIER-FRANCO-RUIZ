@@ -12,6 +12,7 @@ from scipy.stats import mannwhitneyu
 from sklearn.metrics import precision_recall_curve, roc_curve
 from collections import defaultdict
 from torch.utils.data import DataLoader, TensorDataset, Subset
+from pybiomart import Server
 
 
 
@@ -571,6 +572,66 @@ def calculate_gene_weights(expression_matrix, top_percentage=0.2):
     weights = torch.tensor(weights, dtype=torch.float32)
 
     return weights
+
+#SOLO 20% DE LOS GENES 
+def select_top_variable_genes(expression_matrix, top_percentage=0.2):
+    """
+    Filtra la matriz de expresión y devuelve solo los genes más variables (top %).
+
+    Args:
+        expression_matrix (numpy.ndarray o pd.DataFrame): Matriz de expresión (muestras x genes)
+        top_percentage (float): Porcentaje superior de genes más variables a conservar (ej. 0.2 para el 20%)
+
+    Returns:
+        filtered_matrix: Matriz de expresión reducida con solo los genes más variables
+        selected_indices: Índices o nombres de los genes seleccionados
+    """
+    # Paso 1: calcular la varianza de cada gen (por columnas)
+    if isinstance(expression_matrix, pd.DataFrame):
+        variances = expression_matrix.var(axis=0).values
+        gene_names = expression_matrix.columns
+    else:
+        variances = np.var(expression_matrix, axis=0)
+        gene_names = np.arange(expression_matrix.shape[1])
+
+    # Paso 2: seleccionar los índices del top % de genes más variables
+    n_genes = len(variances)
+    n_top = int(top_percentage * n_genes)
+    top_gene_indices = np.argsort(variances)[-n_top:]  # Últimos n_top con mayor varianza
+
+    # Paso 3: filtrar la matriz
+    if isinstance(expression_matrix, pd.DataFrame):
+        filtered_matrix = expression_matrix.iloc[:, top_gene_indices]
+        selected_names = gene_names[top_gene_indices]
+    else:
+        filtered_matrix = expression_matrix[:, top_gene_indices]
+        selected_names = top_gene_indices
+
+    return filtered_matrix, selected_names
+
+# utils.py
+
+from pybiomart import Server
+
+# Función para mapear genes humanos a ratón usando Ensembl
+def map_human_to_mouse_genes(human_genes):
+    server = Server(host='http://www.ensembl.org')
+    human_dataset = server.datasets['hsapiens_gene_ensembl']
+    mouse_dataset = server.datasets['mmusculus_gene_ensembl']
+
+    # Consultamos las homologías entre humanos y ratón
+    homologs = []
+    for gene in human_genes:
+        homolog = human_dataset.query(attributes=['ensembl_gene_id', 'mmusculus_homolog_ensembl_gene'])
+        homolog = homolog[homolog['ensembl_gene_id'] == gene]
+        homologs.append(homolog)
+
+    # Extrayendo los nombres de los genes de ratón correspondientes
+    mouse_genes = [homolog['mmusculus_homolog_ensembl_gene'].iloc[0] if len(homolog) > 0 else None for homolog in homologs]
+
+    return mouse_genes
+
+
 
 #CALCULAR CURRICULUM LEARNING
 

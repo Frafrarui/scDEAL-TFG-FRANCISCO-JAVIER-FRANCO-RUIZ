@@ -225,9 +225,7 @@ def run_main(args):
 
 
     
-    # Añadir sufijo al nombre del encoder si usas curriculum learning
-    curriculum_suffix = "_curriculum" if args.use_curriculum else ""
-    sc_encoder_path = args.sc_encoder_path + para + curriculum_suffix
+   
 
     # Las demás rutas se quedan igual
     source_model_path = args.bulk_model_path + para

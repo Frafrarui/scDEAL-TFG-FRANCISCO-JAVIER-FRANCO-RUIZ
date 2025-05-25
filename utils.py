@@ -609,7 +609,6 @@ def select_top_variable_genes(expression_matrix, top_percentage=0.2):
 
     return filtered_matrix, selected_names
 
-# utils.py
 
 from pybiomart import Server
 
@@ -653,7 +652,7 @@ def get_curriculum_dataloader(X_tensor, C_tensor, batch_size=128):
         cluster_to_indices[cluster].append(idx)
 
     # Ordenar clusters de menor a mayor dificultad (por tamaño)
-    sorted_clusters = sorted(cluster_to_indices.items(), key=lambda x: len(x[1]))
+    sorted_clusters = sorted(cluster_to_indices.items(), key=lambda x: len(x[1]),reverse=True)
 
     # Acumular índices de los clusters (más grandes primero)
     all_indices = []

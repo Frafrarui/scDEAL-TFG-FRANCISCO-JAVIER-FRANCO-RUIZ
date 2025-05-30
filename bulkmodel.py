@@ -209,7 +209,7 @@ def run_main(args):
 
     #  Si el usuario quiere usar solo los genes más variables
     if args.use_gene_filter:
-        print("✅ Filtrando solo los genes más variables (top {:.0f}%)".format(args.top_gene_percentage * 100))
+        print("Filtrando solo los genes más variables (top {:.0f}%)".format(args.top_gene_percentage * 100))
 
         data_df = pd.DataFrame(data, columns=data_r.columns)  # le pasamos los nombres reales de los genes
         data_df_filtered, selected_genes = ut.select_top_variable_genes(data_df, top_percentage=args.top_gene_percentage)

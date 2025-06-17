@@ -116,40 +116,6 @@ unzip scDEAL.zip
 # Ver el contenido del directorio
 ls -a
 
-# Resultado esperado:
-# bulkmodel.py  DaNN  LICENSE    README.md    save       scDEALenv   trainers.py    utils.py
-# casestudy     data  models.py  sampling.py  scanpypip  scmodel.py  trajectory.py
-
-scDEAL
-└───scDEALenv
-|   ...
-│   README.md
-│   bulkmodel.py  
-│   scmodel.py
-|   ...
-└───data
-│   │   ALL_expression.csv
-│   │   ALL_label_binary_wf.csv
-│   └───GSE110894
-│   └───GSE112274
-│   └───GSE117872
-│   └───GSE140440
-│   └───GSE149383
-│   |   ...
-└───save
-|   └───logs
-|   └───figures
-|   └───models
-│   │   └───bulk_encoder
-│   │   └───bulk_pre
-│   │   └───sc_encoder
-│   │   └───sc_pre
-│   └───adata
-│   │    ...   
-└───DaNN
-└───scanpypip
-│   │    ...  
-```
 
 ### Contenido de los directorios
 

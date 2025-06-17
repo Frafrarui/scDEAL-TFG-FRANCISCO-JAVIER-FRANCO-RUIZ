@@ -228,7 +228,7 @@ def train_DAE_GEN_IMPORTANT_model(net,data_loaders={},optimizer=None,loss_functi
         logging.info('Epoch {}/{}'.format(epoch, n_epochs - 1))
         logging.info('-' * 10)
         if epoch == 0:
-            print("✅ Usando pérdida ponderada con gene_weights (top 20% genes importantes)")
+            print("Usando pérdida ponderada con gene_weights (top 20% genes importantes)")
 
 
         

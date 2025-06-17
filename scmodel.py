@@ -96,10 +96,10 @@ def run_main(args):
         print(f"[DEBUG] use_curriculum = {args.use_curriculum} (type: {type(args.use_curriculum)})")
 
         if "GenImpo" in args.dimreduce:
-            print("✅ Modelo cargado con importancia de genes (DAE + Gene Importance)")
+            print(" Modelo cargado con importancia de genes (DAE + Gene Importance)")
             args.dimreduce = args.dimreduce.replace("GenImpo", "")  # Quitamos GenImpo para que DAE siga funcionando normal
         else:
-            print("✅ Modelo cargado normal (DAE sin Gene Importance)")
+            print(" Modelo cargado normal (DAE sin Gene Importance)")
 
 
                 
@@ -450,7 +450,7 @@ def run_main(args):
     if reduce_model == "DAE":
         encoder = AEBase(input_dim=data.shape[1], latent_dim=dim_au_out, h_dims=encoder_hdims, drop_out=args.dropout)
         if args.use_prioritized_loss:
-            print("Usando prioritized loss también en pretraining del encoder SC")
+            print(" Usando prioritized loss también en pretraining del encoder SC")
             # loss_function_e será una función que aplica los gene_weights (similar a como hicimos en bulk)
             expression_matrix = Xtarget_train  # Datos single-cell normalizados
             gene_weights = ut.calculate_gene_weights(expression_matrix, top_percentage=0.2)  # Usa tu misma función
@@ -461,7 +461,7 @@ def run_main(args):
 
             loss_function_e = prioritized_loss
         else:
-            print("Usando MSELoss normal en pretraining del encoder SC")
+            print(" Usando MSELoss normal en pretraining del encoder SC")
             loss_function_e = nn.MSELoss()
             
 
@@ -473,6 +473,7 @@ def run_main(args):
     optimizer_e = optim.Adam(encoder.parameters(), lr=1e-2)
     loss_function_e = nn.MSELoss()
     exp_lr_scheduler_e = lr_scheduler.ReduceLROnPlateau(optimizer_e)
+    print(f"[DEBUG] bulk input_dim (Xsource_train.shape[1]): {Xsource_train.shape[1]}")
 
     # Binary classification
     dim_model_out = 2 #Significa q queremos una salida con dos clases binarias
@@ -526,7 +527,7 @@ def run_main(args):
         # If pretrain is not False load from check point
         if args.checkpoint != "False":
             if args.use_curriculum:
-                print("[CURRICULUM] Se fuerza reentrenamiento del encoder aunque haya checkpoint")
+                print(" [CURRICULUM] Se fuerza reentrenamiento del encoder aunque haya checkpoint")
                 train_flag = True  # ignoramos el checkpoint
             else:
                 try:
@@ -540,7 +541,7 @@ def run_main(args):
 
         # If pretrain is not False and checkpoint is False, retrain the model
         if args.use_curriculum:
-            print("[CURRICULUM] Pretraining con curriculum activado")
+            print(" [CURRICULUM] Pretraining con curriculum activado")
         if train_flag == True:
             #Aqui se llama a la funcion de trainer.py que hace el entrenamiento del encoder
             if reduce_model == "AE":
@@ -576,14 +577,14 @@ def run_main(args):
         embeddings_pretrain = embeddings_pretrain.detach().cpu().numpy()
         adata.obsm["X_pre"] = embeddings_pretrain
         
-        print("Pretrain prediction hecha")
-        print("pretrain_prob_prediction.shape:", pretrain_prob_prediction.shape)
+        print(" Pretrain prediction hecha")
+        print(" pretrain_prob_prediction.shape:", pretrain_prob_prediction.shape)
 
-        print("adata shape:", adata.shape)
-        print("adata.obs shape:", adata.obs.shape)
-        print("adata.obs.index[:5]:", adata.obs.index[:5])
+        print(" adata shape:", adata.shape)
+        print(" adata.obs shape:", adata.obs.shape)
+        print(" adata.obs.index[:5]:", adata.obs.index[:5])
 
-        print("A punto de guardar pretrain_pred en adata.obs")
+        print(" A punto de guardar pretrain_pred en adata.obs")
 
         #Con esto lo que conseguimos es ver como seria sin la transferencia de aprendizaje de bulk
         #a single cell , para compararlo despues la probailidad de ser sensible
@@ -597,7 +598,7 @@ def run_main(args):
     # Using DaNN transfer learning
     # DaNN model
     # Set predictor loss
-    print("A punto de empezar entrenamiento DANN...")
+    print(" A punto de empezar entrenamiento DANN...")
     loss_d = nn.CrossEntropyLoss()#definir la perdida para la clasificacion
     #Configurar optimizador y scheleuder como antes vimos 
     optimizer_d = optim.Adam(encoder.parameters(), lr=1e-2)
@@ -706,16 +707,16 @@ def run_main(args):
         print("Borrando X_pre para evitar error al guardar")
         del adata.obsm["X_pre"]
     if "sens_preds_pret" in adata.obs.columns:
-        print("Borrando sens_preds_pret para evitar error al guardar")
+        print(" Borrando sens_preds_pret para evitar error al guardar")
         del adata.obs["sens_preds_pret"]
     if "sens_label_pret" in adata.obs.columns:
-        print("Borrando sens_label_pret para evitar error al guardar")
+        print(" Borrando sens_label_pret para evitar error al guardar")
         del adata.obs["sens_label_pret"]
 
     #Esta linea guarda todo el objeto adata en un carchivo .h5ad
     adata.write(f"save/adata/{data_name}_{para}.h5ad")
 
-    print("Archivo grande guardado correctamente")
+    print(" Archivo grande guardado correctamente")
 ################################################# END SECTION OF ANALYSIS FOR scRNA-Seq DATA #################################################
     #Con esto evaluamos el modelo entrenado y (si se pide) interpretar los genes mas relevantes 
     from sklearn.metrics import (average_precision_score,
@@ -741,11 +742,11 @@ def run_main(args):
     print(f"[DEBUG] Valor de args.printgene: {args.printgene}")
     print(f"[DEBUG] Se va a ejecutar análisis de genes importantes") if args.printgene == 'T' else print(f"[DEBUG] NO se ejecuta análisis de genes")
 
-    #print("🧪 Estoy justo antes del if args.printgene")
+    #print(" Estoy justo antes del if args.printgene")
 
     if (args.printgene=='T'): #EN caso de activar esa opcion hacemos un analisis para ver lo genes mas importsntes 
     
-        print("Se está ejecutando el análisis de genes importantes")
+        print(" Se está ejecutando el análisis de genes importantes")
 
         # Set up the TargetModel
         target_model = TargetModel(source_model,encoder)#Esto combian el encoder con el precitor , modelo usado para predecir 
